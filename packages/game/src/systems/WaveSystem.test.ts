@@ -135,4 +135,78 @@ describe('WaveSystem', () => {
         expect(enemy.path[enemy.path.length - 1]).toEqual(mapDef.cityCore);
         expect(enemy.pathIndex).toBe(1);
     });
+
+    it('reports "ongoing" while enemies are still spawning or alive', () => {
+        expect(system.getOutcome()).toBe('ongoing');
+
+        system.update(wave.startDelaySeconds);
+        expect(system.getOutcome()).toBe('ongoing');
+    });
+
+    it('costs a life and emits city:damaged when an enemy reaches the city', () => {
+        const smallMap = makeMapDef(2, 1, { gridX: 0, gridY: 0 }, { gridX: 1, gridY: 0 });
+        const smallBuildingSystem = new BuildingSystem(gameState, eventBus, smallMap);
+        const pathing = new PathingSystem(smallBuildingSystem);
+        const smallSystem = new WaveSystem(gameState, eventBus, smallMap, pathing);
+
+        const damaged: number[] = [];
+        eventBus.on('city:damaged', (payload) => damaged.push(payload.lives));
+
+        const startingLives = gameState.city.lives;
+        smallSystem.update(wave.startDelaySeconds); // spawn
+        smallSystem.update(1); // cross the one cell and arrive
+
+        expect(damaged).toEqual([startingLives - 1]);
+        expect(gameState.city.lives).toBe(startingLives - 1);
+    });
+
+    it('reports "won" once the wave is fully cleared without losing the city', () => {
+        // Isolated from the lives mechanic (covered by the tests above):
+        // with no CombatSystem in this test, every enemy walks unimpeded to
+        // the city, which would otherwise drain the default lives well
+        // before all 6 finish and report 'lost' instead.
+        gameState.city.lives = 999;
+
+        system.update(wave.startDelaySeconds); // first spawn
+        for (let i = 1; i < wave.count; i++) {
+            system.update(wave.spawnIntervalSeconds);
+        }
+        expect(system.isSpawningComplete()).toBe(true);
+
+        // One big step: updateEnemyMovement's per-enemy while loop is
+        // bounded by remaining path length, not by deltaSeconds, so a
+        // single huge tick is enough for every still-alive enemy to walk
+        // the rest of its path and arrive in this same call.
+        system.update(100);
+
+        expect(gameState.enemies).toHaveLength(0);
+        expect(system.getOutcome()).toBe('won');
+    });
+
+    it('reports "lost" once lives reach zero, even if spawning isn\'t complete yet', () => {
+        gameState.city.lives = 1;
+        const smallMap = makeMapDef(2, 1, { gridX: 0, gridY: 0 }, { gridX: 1, gridY: 0 });
+        const smallBuildingSystem = new BuildingSystem(gameState, eventBus, smallMap);
+        const pathing = new PathingSystem(smallBuildingSystem);
+        const smallSystem = new WaveSystem(gameState, eventBus, smallMap, pathing);
+
+        smallSystem.update(wave.startDelaySeconds);
+        smallSystem.update(1);
+
+        expect(gameState.city.lives).toBe(0);
+        expect(smallSystem.getOutcome()).toBe('lost');
+    });
+
+    it('never drops lives below zero', () => {
+        gameState.city.lives = 0;
+        const smallMap = makeMapDef(2, 1, { gridX: 0, gridY: 0 }, { gridX: 1, gridY: 0 });
+        const smallBuildingSystem = new BuildingSystem(gameState, eventBus, smallMap);
+        const pathing = new PathingSystem(smallBuildingSystem);
+        const smallSystem = new WaveSystem(gameState, eventBus, smallMap, pathing);
+
+        smallSystem.update(wave.startDelaySeconds);
+        smallSystem.update(1);
+
+        expect(gameState.city.lives).toBe(0);
+    });
 });

@@ -54,33 +54,23 @@ body {
     background: #4a7c3f;
 }
 
-.resource-bar {
+/* One flex-column panel each HUD bar stacks into, instead of every bar
+   hardcoding its own absolute top offset to land under the last one — added
+   for M9's CityStatusBar so a 4th (and any later) row is just another flex
+   child, not another magic pixel value. */
+.hud-panel {
     position: absolute;
     top: 12px;
     left: 12px;
     display: flex;
-    gap: 16px;
-    padding: 6px 10px;
-    border-radius: 4px;
-    background: rgba(15, 15, 15, 0.6);
-    font-family: Arial, sans-serif;
-    font-size: 14px;
-    color: #f4e8d0;
-}
-
-.resource-bar__item {
-    display: flex;
+    flex-direction: column;
     gap: 4px;
 }
 
-.resource-bar__label {
-    color: #b8a988;
-}
-
-.population-bar {
-    position: absolute;
-    top: 46px;
-    left: 12px;
+.resource-bar,
+.population-bar,
+.godpower-bar,
+.city-status-bar {
     display: flex;
     gap: 16px;
     padding: 6px 10px;
@@ -91,35 +81,18 @@ body {
     color: #f4e8d0;
 }
 
-.population-bar__item {
+.resource-bar__item,
+.population-bar__item,
+.godpower-bar__item,
+.city-status-bar__item {
     display: flex;
     gap: 4px;
 }
 
-.population-bar__label {
-    color: #b8a988;
-}
-
-.godpower-bar {
-    position: absolute;
-    top: 80px;
-    left: 12px;
-    display: flex;
-    gap: 16px;
-    padding: 6px 10px;
-    border-radius: 4px;
-    background: rgba(15, 15, 15, 0.6);
-    font-family: Arial, sans-serif;
-    font-size: 14px;
-    color: #f4e8d0;
-}
-
-.godpower-bar__item {
-    display: flex;
-    gap: 4px;
-}
-
-.godpower-bar__label {
+.resource-bar__label,
+.population-bar__label,
+.godpower-bar__label,
+.city-status-bar__label {
     color: #b8a988;
 }
 
@@ -149,4 +122,65 @@ body {
 .ability-bar__item--armed {
     border-color: #f4e8d0;
     background: #7c4a9c;
+}
+
+/* Full-viewport modal: sits above every other HUD element in DOM order and
+   its pointer-events:auto intercepts clicks everywhere, including over the
+   build menu/ability bar corners, so nothing needs disabling separately
+   once the game has ended. */
+.end-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(10, 8, 6, 0.75);
+    pointer-events: auto;
+}
+
+.end-screen__panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 32px 48px;
+    border-radius: 8px;
+    background: #2b2118;
+    border: 1px solid #6b5230;
+    font-family: Arial, sans-serif;
+    text-align: center;
+}
+
+.end-screen__title {
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.end-screen__title--won {
+    color: #f4e8d0;
+}
+
+.end-screen__title--lost {
+    color: #d23b3b;
+}
+
+.end-screen__subtitle {
+    font-size: 15px;
+    color: #b8a988;
+}
+
+.end-screen__button {
+    margin-top: 8px;
+    padding: 10px 24px;
+    border: 1px solid #6b5230;
+    border-radius: 4px;
+    background: #4a7c3f;
+    color: #f4e8d0;
+    font-family: Arial, sans-serif;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.end-screen__button:hover {
+    background: #5a924c;
 }

@@ -25,6 +25,10 @@ export const NEIGHBOR_OFFSETS: ReadonlyArray<readonly [number, number]> = [
     [0, -1]
 ];
 
+// Module-level, so — like WaveSystem's nextEnemyId — it does NOT reset
+// across scene.restart() (M9). Harmless for the same reason: an opaque Map
+// key, never parsed, and `occupied`/gameState.buildings are both rebuilt
+// fresh per run.
 let nextBuildingId = 1;
 
 function cellKey(gridX: number, gridY: number): string {

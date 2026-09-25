@@ -29,6 +29,15 @@ export interface GodPowerState {
     unlockedAbilities: string[];
 }
 
+// How many enemies may reach the city before the wave is lost. A small
+// buffer rather than "any leak = instant loss" — losing one raider through
+// an imperfect defense shouldn't end the run, only losing the city should.
+export const STARTING_LIVES = 3;
+
+export interface CityState {
+    lives: number;
+}
+
 export interface LiveEnemy {
     id: string;
     defId: string;
@@ -52,6 +61,7 @@ export interface GameState {
     worship: WorshipState;
     godPower: GodPowerState;
     enemies: LiveEnemy[];
+    city: CityState;
 }
 
 export function createGameState(): GameState {
@@ -67,6 +77,7 @@ export function createGameState(): GameState {
         population: { total: 0, happiness: 1 },
         worship: { faithPerTick: 0, faithTotal: 0 },
         godPower: { divineEnergy: 0, unlockedAbilities: [] },
-        enemies: []
+        enemies: [],
+        city: { lives: STARTING_LIVES }
     };
 }

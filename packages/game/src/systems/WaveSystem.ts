@@ -6,6 +6,13 @@ import type { EventBus } from '../state/EventBus';
 import type { GameState, LiveEnemy } from '../state/GameState';
 import type { PathingSystem } from './PathingSystem';
 
+// Module-level, so it does NOT reset across scene.restart() (M9) — a
+// restarted run's enemies continue from wherever the previous run left off
+// (e.g. e7, e8...) rather than starting back at e1. That's harmless: IDs are
+// opaque Map keys (WorldScene.enemyImages, WaveSystem.removeEnemy), never
+// parsed or compared to a literal, and enemyImages/gameState.enemies are
+// both freshly recreated in create() — verified live across two consecutive
+// restarts with no desync between the two.
 let nextEnemyId = 1;
 
 // Owns the whole enemy lifecycle (spawn timing, movement along its path,
@@ -47,6 +54,20 @@ export class WaveSystem {
     /** True once every wave has finished spawning (not necessarily killed/arrived). */
     isSpawningComplete(): boolean {
         return this.allWavesSpawned;
+    }
+
+    // 'lost' takes priority over 'won' — the two are only simultaneously
+    // "true" if the very enemy that emptied the last life also happened to
+    // be the wave's last arrival, and losing the city outranks having
+    // technically finished spawning.
+    getOutcome(): 'ongoing' | 'won' | 'lost' {
+        if (this.gameState.city.lives <= 0) {
+            return 'lost';
+        }
+        if (this.allWavesSpawned && this.gameState.enemies.length === 0) {
+            return 'won';
+        }
+        return 'ongoing';
     }
 
     // The one place gameState.enemies ever loses an entry — both the
@@ -195,6 +216,11 @@ export class WaveSystem {
         for (const enemyId of arrived) {
             this.removeEnemy(enemyId);
             this.eventBus.emit('enemy:reachedCity', { enemyId });
+            // Each arrival costs a life regardless of how many are already
+            // gone — floors at 0 rather than going negative so the display
+            // never reads "-1 lives".
+            this.gameState.city.lives = Math.max(0, this.gameState.city.lives - 1);
+            this.eventBus.emit('city:damaged', { lives: this.gameState.city.lives });
         }
     }
 }

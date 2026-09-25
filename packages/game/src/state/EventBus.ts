@@ -17,6 +17,9 @@ export interface GameEvents {
     'enemy:reachedCity': { enemyId: string };
     'enemy:killed': { enemyId: string };
     'tower:fired': { buildingId: string; targetEnemyId: string; gridX: number; gridY: number };
+    'city:damaged': { lives: number };
+    'game:won': Record<string, never>;
+    'game:lost': Record<string, never>;
 }
 
 type Listener<T> = (payload: T) => void;

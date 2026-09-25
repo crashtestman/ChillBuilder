@@ -31,7 +31,7 @@ export class GodPowerBar {
         }
     };
 
-    constructor(gameState: GameState, eventBus: EventBus) {
+    constructor(gameState: GameState, eventBus: EventBus, container?: HTMLElement) {
         this.eventBus = eventBus;
         this.root = document.createElement('div');
         this.root.className = 'godpower-bar';
@@ -60,8 +60,8 @@ export class GodPowerBar {
 
         this.eventBus.on('godpower:changed', this.onGodPowerChanged);
 
-        const uiRoot = document.getElementById('ui-root');
-        (uiRoot ?? document.body).appendChild(this.root);
+        const target = container ?? document.getElementById('ui-root') ?? document.body;
+        target.appendChild(this.root);
     }
 
     destroy(): void {

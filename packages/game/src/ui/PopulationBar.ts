@@ -30,7 +30,7 @@ export class PopulationBar {
         }
     };
 
-    constructor(gameState: GameState, eventBus: EventBus) {
+    constructor(gameState: GameState, eventBus: EventBus, container?: HTMLElement) {
         this.eventBus = eventBus;
         this.root = document.createElement('div');
         this.root.className = 'population-bar';
@@ -59,8 +59,8 @@ export class PopulationBar {
 
         this.eventBus.on('population:changed', this.onPopulationChanged);
 
-        const uiRoot = document.getElementById('ui-root');
-        (uiRoot ?? document.body).appendChild(this.root);
+        const target = container ?? document.getElementById('ui-root') ?? document.body;
+        target.appendChild(this.root);
     }
 
     destroy(): void {

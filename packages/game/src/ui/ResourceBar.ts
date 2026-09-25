@@ -28,7 +28,7 @@ export class ResourceBar {
         }
     };
 
-    constructor(gameState: GameState, eventBus: EventBus) {
+    constructor(gameState: GameState, eventBus: EventBus, container?: HTMLElement) {
         this.eventBus = eventBus;
         this.root = document.createElement('div');
         this.root.className = 'resource-bar';
@@ -52,8 +52,8 @@ export class ResourceBar {
 
         this.eventBus.on('resource:changed', this.onResourceChanged);
 
-        const uiRoot = document.getElementById('ui-root');
-        (uiRoot ?? document.body).appendChild(this.root);
+        const target = container ?? document.getElementById('ui-root') ?? document.body;
+        target.appendChild(this.root);
     }
 
     destroy(): void {

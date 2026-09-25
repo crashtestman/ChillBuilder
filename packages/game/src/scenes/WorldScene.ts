@@ -29,6 +29,8 @@ import { EventBus } from '../state/EventBus';
 import { createGameState, type GameState, type LiveEnemy, type PlacedBuilding } from '../state/GameState';
 import { AbilityBar } from '../ui/AbilityBar';
 import { BuildMenu } from '../ui/BuildMenu';
+import { CityStatusBar } from '../ui/CityStatusBar';
+import { EndScreen, type GameOutcome } from '../ui/EndScreen';
 import { GodPowerBar } from '../ui/GodPowerBar';
 import { PopulationBar } from '../ui/PopulationBar';
 import { ResourceBar } from '../ui/ResourceBar';
@@ -51,6 +53,9 @@ export class WorldScene extends Scene {
     private resourceBar?: ResourceBar;
     private populationBar?: PopulationBar;
     private godPowerBar?: GodPowerBar;
+    private cityStatusBar?: CityStatusBar;
+    private endScreen?: EndScreen;
+    private hudPanel?: HTMLDivElement;
     private gameState!: GameState;
     private eventBus!: EventBus;
     private buildingSystem!: BuildingSystem;
@@ -70,12 +75,30 @@ export class WorldScene extends Scene {
     private buildingOriginY = 0.5;
     private towerOriginY = 0.5;
     private enemyImages = new Map<string, GameObjects.Image>();
+    // Phaser reuses this same Scene instance across scene.restart() calls
+    // (M9's Restart button) rather than constructing a new one, so this and
+    // every other per-run field above must be explicitly reset at the top
+    // of create() — a class-field initializer only runs once, at
+    // construction, not on every restart.
+    private gameEnded = false;
 
     constructor() {
         super('World');
     }
 
     create() {
+        // Reset per-run state explicitly — see the gameEnded field comment:
+        // restart() reuses this Scene instance, so these don't reset
+        // themselves the way they would on a fresh page load.
+        this.selectedDefId = null;
+        this.smiteArmed = false;
+        this.ghostImages = [];
+        this.lastHoverCell = null;
+        this.lastGhostAffordable = null;
+        this.enemyImages = new Map();
+        this.gameEnded = false;
+        this.endScreen = undefined;
+
         // Checkered so individual cells actually read as a grid rather than
         // one flat green field.
         createPlaceholderDiamondTexture(this, 'placeholder-tile-a', TILE_WIDTH, TILE_HEIGHT, 0x4a7c3f, 0x3a6230);
@@ -154,9 +177,18 @@ export class WorldScene extends Scene {
                 this.clearGhost();
             }
         });
-        this.resourceBar = new ResourceBar(this.gameState, this.eventBus);
-        this.populationBar = new PopulationBar(this.gameState, this.eventBus);
-        this.godPowerBar = new GodPowerBar(this.gameState, this.eventBus);
+        // One flex-column panel instead of each bar hardcoding its own
+        // absolute top offset to stack under the last one — M9's
+        // "consolidated HUD": adding CityStatusBar here didn't need a new
+        // magic pixel value, and neither will the next one.
+        this.hudPanel = document.createElement('div');
+        this.hudPanel.className = 'hud-panel';
+        (document.getElementById('ui-root') ?? document.body).appendChild(this.hudPanel);
+
+        this.resourceBar = new ResourceBar(this.gameState, this.eventBus, this.hudPanel);
+        this.populationBar = new PopulationBar(this.gameState, this.eventBus, this.hudPanel);
+        this.godPowerBar = new GodPowerBar(this.gameState, this.eventBus, this.hudPanel);
+        this.cityStatusBar = new CityStatusBar(this.gameState, this.eventBus, this.hudPanel);
 
         this.events.once('shutdown', () => {
             this.inputController?.destroy();
@@ -165,10 +197,20 @@ export class WorldScene extends Scene {
             this.resourceBar?.destroy();
             this.populationBar?.destroy();
             this.godPowerBar?.destroy();
+            this.cityStatusBar?.destroy();
+            this.endScreen?.destroy();
+            this.hudPanel?.remove();
         });
     }
 
     update(_time: number, delta: number): void {
+        if (this.gameEnded) {
+            // Frozen: the EndScreen overlay is already covering input, but
+            // skipping every system tick too means nothing keeps ticking
+            // (resources, cooldowns, enemies) behind it while it's up.
+            return;
+        }
+
         const deltaSeconds = delta / 1000;
         // Deliberate order: buildings produce/consume resources first, then
         // population reacts to this tick's food (consumes upkeep, grows/
@@ -192,6 +234,20 @@ export class WorldScene extends Scene {
         this.abilityBar?.refresh();
         this.updateGhostPreview();
         this.updateEnemySprites();
+
+        // Checked last, after this tick's own state changes are already
+        // applied and rendered — the outcome reflects what the player just
+        // saw happen, not a stale read from before this frame's combat.
+        const outcome = this.waveSystem.getOutcome();
+        if (outcome !== 'ongoing') {
+            this.handleGameEnded(outcome);
+        }
+    }
+
+    private handleGameEnded(outcome: GameOutcome): void {
+        this.gameEnded = true;
+        this.clearGhost();
+        this.endScreen = new EndScreen(outcome, () => this.scene.restart());
     }
 
     private buildGroundPlane(): void {
@@ -287,6 +343,10 @@ export class WorldScene extends Scene {
     }
 
     private handleTileTapped(cell: GridPoint): void {
+        if (this.gameEnded) {
+            return;
+        }
+
         if (this.smiteArmed) {
             this.handleSmiteTapped(cell);
             return;
