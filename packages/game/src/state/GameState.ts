@@ -7,13 +7,20 @@ export interface PlacedBuilding {
     gridY: number;
 }
 
+export interface PopulationState {
+    total: number;
+    // 0-1. Derived from food surplus by PopulationSystem.
+    happiness: number;
+}
+
 // The single authoritative game-state object the plan calls for. Only holds
-// what M2 (resources, placed buildings) actually needs so far — population,
-// faith and god-power fields join it in the milestones that introduce them,
-// rather than sitting here unused ahead of time.
+// what's needed so far — faith and god-power fields join it in the
+// milestones that introduce them, rather than sitting here unused ahead of
+// time.
 export interface GameState {
     resources: Record<string, number>;
     buildings: PlacedBuilding[];
+    population: PopulationState;
 }
 
 export function createGameState(): GameState {
@@ -22,5 +29,10 @@ export function createGameState(): GameState {
         resources[resource.id] = resource.startingAmount;
     }
 
-    return { resources, buildings: [] };
+    return {
+        resources,
+        buildings: [],
+        // Nobody lives in the city yet — growth only starts once housing exists.
+        population: { total: 0, happiness: 1 }
+    };
 }

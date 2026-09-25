@@ -14,7 +14,8 @@ export interface BuildingDef {
     // Resource -> amount per second, ticked by EconomySystem.
     produces?: Record<string, number>;
     consumes?: Record<string, number>;
-    providesHousing?: boolean;
+    // How many population this building houses, consumed by PopulationSystem.
+    housingCapacity?: number;
     isTemple?: boolean;
 }
 
@@ -25,7 +26,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
         category: 'housing',
         footprint: { width: 2, height: 2 },
         buildCost: { wood: 20 },
-        providesHousing: true
+        housingCapacity: 4
     },
     farm: {
         id: 'farm',

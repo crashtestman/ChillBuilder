@@ -16,27 +16,32 @@ import {
 } from '../iso/IsoMath';
 import { BuildingSystem } from '../systems/BuildingSystem';
 import { EconomySystem } from '../systems/EconomySystem';
+import { PopulationSystem } from '../systems/PopulationSystem';
 import { EventBus } from '../state/EventBus';
 import { createGameState, type GameState, type PlacedBuilding } from '../state/GameState';
 import { BuildMenu } from '../ui/BuildMenu';
+import { PopulationBar } from '../ui/PopulationBar';
 import { ResourceBar } from '../ui/ResourceBar';
 import { createPlaceholderBlockTexture, createPlaceholderDiamondTexture, shadeColor } from '../util/PlaceholderFactory';
 
 const mapDef = slice01;
 const BUILDING_WALL_HEIGHT = TILE_HEIGHT / 2;
 
-// M2/M3: building placement (BuildMenu, ghost preview via inverse-
+// M2/M3/M4: building placement (BuildMenu, ghost preview via inverse-
 // projection, footprint/cost validation, the wall-off rule) lives in
-// BuildingSystem; the resource tick lives in EconomySystem. This scene just
-// renders whatever they decide and forwards frame time to the tick.
+// BuildingSystem; the resource tick lives in EconomySystem; population
+// growth/happiness lives in PopulationSystem. This scene just renders
+// whatever they decide and forwards frame time to each tick.
 export class WorldScene extends Scene {
     private inputController?: InputController;
     private buildMenu?: BuildMenu;
     private resourceBar?: ResourceBar;
+    private populationBar?: PopulationBar;
     private gameState!: GameState;
     private eventBus!: EventBus;
     private buildingSystem!: BuildingSystem;
     private economySystem!: EconomySystem;
+    private populationSystem!: PopulationSystem;
 
     private selectedDefId: string | null = null;
     private ghostImages: GameObjects.Image[] = [];
@@ -73,6 +78,7 @@ export class WorldScene extends Scene {
         this.eventBus = new EventBus();
         this.buildingSystem = new BuildingSystem(this.gameState, this.eventBus, mapDef);
         this.economySystem = new EconomySystem(this.gameState, this.eventBus);
+        this.populationSystem = new PopulationSystem(this.gameState, this.eventBus);
         this.eventBus.on('building:placed', ({ building }) => this.renderBuilding(building));
 
         this.buildGroundPlane();
@@ -87,16 +93,20 @@ export class WorldScene extends Scene {
             this.lastHoverCell = null;
         });
         this.resourceBar = new ResourceBar(this.gameState, this.eventBus);
+        this.populationBar = new PopulationBar(this.gameState, this.eventBus);
 
         this.events.once('shutdown', () => {
             this.inputController?.destroy();
             this.buildMenu?.destroy();
             this.resourceBar?.destroy();
+            this.populationBar?.destroy();
         });
     }
 
     update(_time: number, delta: number): void {
-        this.economySystem.update(delta / 1000);
+        const deltaSeconds = delta / 1000;
+        this.economySystem.update(deltaSeconds);
+        this.populationSystem.update(deltaSeconds);
         this.updateGhostPreview();
     }
 

@@ -1,11 +1,11 @@
-import type { PlacedBuilding } from './GameState';
+import type { PlacedBuilding, PopulationState } from './GameState';
 
-// Event vocabulary grows as each milestone needs it — only the two events
-// M2 actually emits are declared so far (population:changed, faith:generated
-// etc. join this map when M4/M5 introduce those systems).
+// Event vocabulary grows as each milestone needs it — faith:generated,
+// godpower:changed etc. join this map when M5/M6 introduce those systems.
 export interface GameEvents {
     'resource:changed': { resourceId: string; amount: number };
     'building:placed': { building: PlacedBuilding };
+    'population:changed': PopulationState;
 }
 
 type Listener<T> = (payload: T) => void;

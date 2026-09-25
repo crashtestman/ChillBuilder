@@ -76,3 +76,26 @@ body {
 .resource-bar__label {
     color: #b8a988;
 }
+
+.population-bar {
+    position: absolute;
+    top: 46px;
+    left: 12px;
+    display: flex;
+    gap: 16px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    background: rgba(15, 15, 15, 0.6);
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    color: #f4e8d0;
+}
+
+.population-bar__item {
+    display: flex;
+    gap: 4px;
+}
+
+.population-bar__label {
+    color: #b8a988;
+}
