@@ -1,11 +1,17 @@
 import type { PlacedBuilding, PopulationState } from './GameState';
 
-// Event vocabulary grows as each milestone needs it — faith:generated,
-// godpower:changed etc. join this map when M5/M6 introduce those systems.
+// Event vocabulary grows as each milestone needs it.
 export interface GameEvents {
     'resource:changed': { resourceId: string; amount: number };
     'building:placed': { building: PlacedBuilding };
     'population:changed': PopulationState;
+    'faith:generated': { amount: number; total: number };
+    'godpower:changed': { godTier: number; divineEnergy: number };
+    'godpower:ability-unlocked': { abilityId: string };
+    // Targeting (grid location) lives here, not in GodPowerSystem, which
+    // only knows about unlock/cooldown/energy bookkeeping. Damage
+    // resolution against this target is finished in M8's CombatSystem.
+    'ability:cast': { abilityId: string; gridX: number; gridY: number };
 }
 
 type Listener<T> = (payload: T) => void;

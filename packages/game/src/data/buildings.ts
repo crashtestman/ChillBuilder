@@ -43,5 +43,13 @@ export const BUILDINGS: Record<string, BuildingDef> = {
         footprint: { width: 1, height: 1 },
         buildCost: { wood: 15 },
         produces: { wood: 1 }
+    },
+    temple: {
+        id: 'temple',
+        name: 'Temple',
+        category: 'temple',
+        footprint: { width: 2, height: 2 },
+        buildCost: { wood: 20, gold: 15 },
+        isTemple: true
     }
 };

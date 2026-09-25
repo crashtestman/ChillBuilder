@@ -1,6 +1,7 @@
 import type { GameObjects } from 'phaser';
 import { Scene } from 'phaser';
 import { BUILDINGS } from '../data/buildings';
+import { GOD_ABILITIES } from '../data/godAbilities';
 import { slice01 } from '../data/mapDefs/slice01';
 import { InputController } from '../input/InputController';
 import {
@@ -16,10 +17,14 @@ import {
 } from '../iso/IsoMath';
 import { BuildingSystem } from '../systems/BuildingSystem';
 import { EconomySystem } from '../systems/EconomySystem';
+import { GodPowerSystem } from '../systems/GodPowerSystem';
 import { PopulationSystem } from '../systems/PopulationSystem';
+import { WorshipSystem } from '../systems/WorshipSystem';
 import { EventBus } from '../state/EventBus';
 import { createGameState, type GameState, type PlacedBuilding } from '../state/GameState';
+import { AbilityBar } from '../ui/AbilityBar';
 import { BuildMenu } from '../ui/BuildMenu';
+import { GodPowerBar } from '../ui/GodPowerBar';
 import { PopulationBar } from '../ui/PopulationBar';
 import { ResourceBar } from '../ui/ResourceBar';
 import { createPlaceholderBlockTexture, createPlaceholderDiamondTexture, shadeColor } from '../util/PlaceholderFactory';
@@ -27,23 +32,30 @@ import { createPlaceholderBlockTexture, createPlaceholderDiamondTexture, shadeCo
 const mapDef = slice01;
 const BUILDING_WALL_HEIGHT = TILE_HEIGHT / 2;
 
-// M2/M3/M4: building placement (BuildMenu, ghost preview via inverse-
+// M2-M5: building placement (BuildMenu, ghost preview via inverse-
 // projection, footprint/cost validation, the wall-off rule) lives in
 // BuildingSystem; the resource tick lives in EconomySystem; population
-// growth/happiness lives in PopulationSystem. This scene just renders
-// whatever they decide and forwards frame time to each tick.
+// growth/happiness lives in PopulationSystem; faith/god-power lives in
+// WorshipSystem + GodPowerSystem (the latter reacts to faith:generated
+// rather than being ticked directly). This scene just renders whatever
+// they decide and forwards frame time to each tick.
 export class WorldScene extends Scene {
     private inputController?: InputController;
     private buildMenu?: BuildMenu;
+    private abilityBar?: AbilityBar;
     private resourceBar?: ResourceBar;
     private populationBar?: PopulationBar;
+    private godPowerBar?: GodPowerBar;
     private gameState!: GameState;
     private eventBus!: EventBus;
     private buildingSystem!: BuildingSystem;
     private economySystem!: EconomySystem;
     private populationSystem!: PopulationSystem;
+    private worshipSystem!: WorshipSystem;
+    private godPowerSystem!: GodPowerSystem;
 
     private selectedDefId: string | null = null;
+    private smiteArmed = false;
     private ghostImages: GameObjects.Image[] = [];
     private lastHoverCell: GridPoint | null = null;
     private lastGhostAffordable: boolean | null = null;
@@ -73,12 +85,15 @@ export class WorldScene extends Scene {
         this.buildingOriginY = buildingTexture.originY;
         createPlaceholderBlockTexture(this, 'placeholder-ghost-ok', TILE_WIDTH, TILE_HEIGHT, BUILDING_WALL_HEIGHT, 0x4a7cff);
         createPlaceholderBlockTexture(this, 'placeholder-ghost-bad', TILE_WIDTH, TILE_HEIGHT, BUILDING_WALL_HEIGHT, 0xd23b3b);
+        createPlaceholderDiamondTexture(this, 'placeholder-smite-effect', TILE_WIDTH, TILE_HEIGHT, 0xfff2b0, 0xffd23b);
 
         this.gameState = createGameState();
         this.eventBus = new EventBus();
         this.buildingSystem = new BuildingSystem(this.gameState, this.eventBus, mapDef);
         this.economySystem = new EconomySystem(this.gameState, this.eventBus);
         this.populationSystem = new PopulationSystem(this.gameState, this.eventBus);
+        this.worshipSystem = new WorshipSystem(this.gameState, this.eventBus);
+        this.godPowerSystem = new GodPowerSystem(this.gameState, this.eventBus);
         this.eventBus.on('building:placed', ({ building }) => this.renderBuilding(building));
 
         this.buildGroundPlane();
@@ -91,22 +106,47 @@ export class WorldScene extends Scene {
         this.buildMenu = new BuildMenu(Object.values(BUILDINGS), (defId) => {
             this.selectedDefId = defId;
             this.lastHoverCell = null;
+            // Mutually exclusive with Smite targeting — a tap can only mean
+            // one thing at a time.
+            this.abilityBar?.setArmed(false);
+            this.smiteArmed = false;
+        });
+        this.abilityBar = new AbilityBar(GOD_ABILITIES.smite, this.eventBus, this.godPowerSystem, (armed) => {
+            this.smiteArmed = armed;
+            if (armed) {
+                this.selectedDefId = null;
+                this.buildMenu?.deselect();
+                this.clearGhost();
+            }
         });
         this.resourceBar = new ResourceBar(this.gameState, this.eventBus);
         this.populationBar = new PopulationBar(this.gameState, this.eventBus);
+        this.godPowerBar = new GodPowerBar(this.gameState, this.eventBus);
 
         this.events.once('shutdown', () => {
             this.inputController?.destroy();
             this.buildMenu?.destroy();
+            this.abilityBar?.destroy();
             this.resourceBar?.destroy();
             this.populationBar?.destroy();
+            this.godPowerBar?.destroy();
         });
     }
 
     update(_time: number, delta: number): void {
         const deltaSeconds = delta / 1000;
+        // Deliberate order: buildings produce/consume resources first, then
+        // population reacts to this tick's food (consumes upkeep, grows/
+        // shrinks off the result), then worship reads this tick's
+        // (possibly just-changed) population/happiness to generate faith.
+        // GodPowerSystem's stat accrual isn't ticked here — it reacts to
+        // WorshipSystem's faith:generated synchronously instead — but its
+        // ability cooldowns are real-time, so those still need a tick.
         this.economySystem.update(deltaSeconds);
         this.populationSystem.update(deltaSeconds);
+        this.worshipSystem.update(deltaSeconds);
+        this.godPowerSystem.update(deltaSeconds);
+        this.abilityBar?.refresh();
         this.updateGhostPreview();
     }
 
@@ -203,6 +243,11 @@ export class WorldScene extends Scene {
     }
 
     private handleTileTapped(cell: GridPoint): void {
+        if (this.smiteArmed) {
+            this.handleSmiteTapped(cell);
+            return;
+        }
+
         if (!this.selectedDefId) {
             return;
         }
@@ -221,6 +266,31 @@ export class WorldScene extends Scene {
             this.lastHoverCell = null;
             this.lastGhostAffordable = null;
         }
+    }
+
+    private handleSmiteTapped(cell: GridPoint): void {
+        const result = this.godPowerSystem.tryCast('smite');
+        if (!result.ok) {
+            return;
+        }
+
+        this.eventBus.emit('ability:cast', { abilityId: 'smite', gridX: cell.gridX, gridY: cell.gridY });
+        this.playSmiteEffect(cell);
+
+        // Single-shot per arm, same UX decision as building placement: stay
+        // armed and the pointer sitting on the same cell would just try (and
+        // fail, on-cooldown) to cast again next frame's tap.
+        this.smiteArmed = false;
+        this.abilityBar?.setArmed(false);
+    }
+
+    private playSmiteEffect(cell: GridPoint): void {
+        const { x, y } = gridToWorld(cell.gridX, cell.gridY);
+        const effect = this.add
+            .image(x, y, 'placeholder-smite-effect')
+            .setOrigin(0.5, 0.5)
+            .setDepth(footprintDepth(cell.gridX, cell.gridY, 1, 1, DEPTH_LAYER_GHOST));
+        this.time.delayedCall(400, () => effect.destroy());
     }
 
     private renderBuilding(building: PlacedBuilding): void {
