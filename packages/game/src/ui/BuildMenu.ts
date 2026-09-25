@@ -38,6 +38,12 @@ export class BuildMenu {
         (uiRoot ?? document.body).appendChild(this.root);
     }
 
+    /** Clears the selected-button highlight (e.g. after a placement consumes it). */
+    deselect(): void {
+        this.selectedButton?.classList.remove('build-menu__item--selected');
+        this.selectedButton = null;
+    }
+
     destroy(): void {
         this.root.remove();
     }

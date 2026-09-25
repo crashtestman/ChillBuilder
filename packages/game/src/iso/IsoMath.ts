@@ -59,6 +59,17 @@ export const DEPTH_LAYER_ENTITY = 2;
 // the thing it's warning you can't build on top of.
 export const DEPTH_LAYER_GHOST = 3;
 
+// The flat terrain plane has zero visual height and never needs sorting
+// against itself, so it must always render behind every footprint occupant
+// regardless of grid position — NOT via tileDepth()'s per-diagonal formula.
+// A building/ghost's sprite is taller than one tile, so its walls extend on
+// screen into the neighboring ground tile one diagonal step "in front" of
+// it; under the per-diagonal scheme that ground tile's depth is always
+// higher (it's one step further along gridX+gridY), so it would paint over
+// those walls. A single constant below tileDepth()'s minimum possible value
+// (grid (0,0), layer DEPTH_LAYER_GROUND) avoids that regardless of height.
+export const GROUND_DEPTH = -1;
+
 export function tileDepth(gridX: number, gridY: number, subOffset = DEPTH_LAYER_GROUND): number {
     return (gridX + gridY) * DEPTH_MULTIPLIER + subOffset;
 }

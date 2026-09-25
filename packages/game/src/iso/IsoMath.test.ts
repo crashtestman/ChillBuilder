@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { DEPTH_LAYER_ENTITY, footprintDepth, gridToWorld, tileDepth, worldToGrid, worldToNearestGrid } from './IsoMath';
+import {
+    DEPTH_LAYER_ENTITY,
+    DEPTH_LAYER_GROUND,
+    footprintDepth,
+    GROUND_DEPTH,
+    gridToWorld,
+    tileDepth,
+    worldToGrid,
+    worldToNearestGrid
+} from './IsoMath';
 
 describe('gridToWorld / worldToGrid', () => {
     it('projects the origin onto itself', () => {
@@ -35,6 +44,21 @@ describe('tileDepth', () => {
 
     it('lets a sub-offset break ties on the same diagonal', () => {
         expect(tileDepth(1, 1, 1)).toBeGreaterThan(tileDepth(2, 0));
+    });
+});
+
+describe('GROUND_DEPTH', () => {
+    // Map grids are always non-negative (a MapDef's cols/rows index from
+    // 0), so that's the only space this needs to hold over — the true
+    // minimum a real tile/building/ghost can reach is grid (0, 0) at the
+    // lowest layer.
+    it('is below every possible tileDepth/footprintDepth value on a real map, so a flat ground plane can never occlude a raised sprite', () => {
+        expect(GROUND_DEPTH).toBeLessThan(tileDepth(0, 0, DEPTH_LAYER_GROUND));
+
+        for (const [gridX, gridY] of [[0, 0], [15, 15], [1, 0], [5, 12]]) {
+            expect(GROUND_DEPTH).toBeLessThan(tileDepth(gridX, gridY));
+            expect(GROUND_DEPTH).toBeLessThan(footprintDepth(gridX, gridY, 2, 2));
+        }
     });
 });
 

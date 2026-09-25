@@ -7,11 +7,11 @@ import {
     DEPTH_LAYER_BUILDING,
     DEPTH_LAYER_GHOST,
     footprintDepth,
+    GROUND_DEPTH,
     type GridPoint,
     gridToWorld,
     TILE_HEIGHT,
     TILE_WIDTH,
-    tileDepth,
     worldToNearestGrid
 } from '../iso/IsoMath';
 import { BuildingSystem } from '../systems/BuildingSystem';
@@ -20,9 +20,10 @@ import { EventBus } from '../state/EventBus';
 import { createGameState, type GameState, type PlacedBuilding } from '../state/GameState';
 import { BuildMenu } from '../ui/BuildMenu';
 import { ResourceBar } from '../ui/ResourceBar';
-import { createPlaceholderDiamondTexture } from '../util/PlaceholderFactory';
+import { createPlaceholderBlockTexture, createPlaceholderDiamondTexture, shadeColor } from '../util/PlaceholderFactory';
 
 const mapDef = slice01;
+const BUILDING_WALL_HEIGHT = TILE_HEIGHT / 2;
 
 // M2/M3: building placement (BuildMenu, ghost preview via inverse-
 // projection, footprint/cost validation, the wall-off rule) lives in
@@ -41,16 +42,32 @@ export class WorldScene extends Scene {
     private ghostImages: GameObjects.Image[] = [];
     private lastHoverCell: GridPoint | null = null;
     private lastGhostAffordable: boolean | null = null;
+    private buildingOriginY = 0.5;
 
     constructor() {
         super('World');
     }
 
     create() {
-        createPlaceholderDiamondTexture(this, 'placeholder-tile', TILE_WIDTH, TILE_HEIGHT, 0x4a7c3f, 0x3a6230);
-        createPlaceholderDiamondTexture(this, 'placeholder-building', TILE_WIDTH, TILE_HEIGHT, 0x8a6d3f, 0x6b5230);
-        createPlaceholderDiamondTexture(this, 'placeholder-ghost-ok', TILE_WIDTH, TILE_HEIGHT, 0x4a7cff);
-        createPlaceholderDiamondTexture(this, 'placeholder-ghost-bad', TILE_WIDTH, TILE_HEIGHT, 0xd23b3b);
+        // Checkered so individual cells actually read as a grid rather than
+        // one flat green field.
+        createPlaceholderDiamondTexture(this, 'placeholder-tile-a', TILE_WIDTH, TILE_HEIGHT, 0x4a7c3f, 0x3a6230);
+        createPlaceholderDiamondTexture(this, 'placeholder-tile-b', TILE_WIDTH, TILE_HEIGHT, shadeColor(0x4a7c3f, 0.88), 0x3a6230);
+
+        // Low 3-sided "blocks" instead of flat diamonds, so buildings read
+        // as standing structures rather than colored floor tiles.
+        const buildingTexture = createPlaceholderBlockTexture(
+            this,
+            'placeholder-building',
+            TILE_WIDTH,
+            TILE_HEIGHT,
+            BUILDING_WALL_HEIGHT,
+            0x8a6d3f,
+            0x6b5230
+        );
+        this.buildingOriginY = buildingTexture.originY;
+        createPlaceholderBlockTexture(this, 'placeholder-ghost-ok', TILE_WIDTH, TILE_HEIGHT, BUILDING_WALL_HEIGHT, 0x4a7cff);
+        createPlaceholderBlockTexture(this, 'placeholder-ghost-bad', TILE_WIDTH, TILE_HEIGHT, BUILDING_WALL_HEIGHT, 0xd23b3b);
 
         this.gameState = createGameState();
         this.eventBus = new EventBus();
@@ -87,7 +104,8 @@ export class WorldScene extends Scene {
         for (let gridY = 0; gridY < mapDef.rows; gridY++) {
             for (let gridX = 0; gridX < mapDef.cols; gridX++) {
                 const { x, y } = gridToWorld(gridX, gridY);
-                this.add.image(x, y, 'placeholder-tile').setDepth(tileDepth(gridX, gridY));
+                const textureKey = (gridX + gridY) % 2 === 0 ? 'placeholder-tile-a' : 'placeholder-tile-b';
+                this.add.image(x, y, textureKey).setDepth(GROUND_DEPTH);
             }
         }
     }
@@ -162,7 +180,8 @@ export class WorldScene extends Scene {
 
         for (const ghostCell of this.buildingSystem.footprintCells(def, hovered.gridX, hovered.gridY)) {
             const { x, y } = gridToWorld(ghostCell.gridX, ghostCell.gridY);
-            this.ghostImages.push(this.add.image(x, y, textureKey).setAlpha(0.6).setDepth(depth));
+            const image = this.add.image(x, y, textureKey).setOrigin(0.5, this.buildingOriginY).setAlpha(0.6).setDepth(depth);
+            this.ghostImages.push(image);
         }
     }
 
@@ -181,10 +200,16 @@ export class WorldScene extends Scene {
         const result = this.buildingSystem.place(this.selectedDefId, cell.gridX, cell.gridY);
         if (result.ok) {
             // Rendering happens via the 'building:placed' subscription in
-            // create() — this just invalidates the ghost's cached hover
-            // cell so it re-evaluates canPlace() now that this cell is
-            // occupied (e.g. flips from ok to 'occupied' without moving).
+            // create(). Deselect rather than leaving the def armed: with the
+            // pointer still sitting on the now-occupied cell, an armed
+            // ghost would immediately redraw red right on top of the
+            // building that was just placed, reading as a failure when it
+            // wasn't one. Arm again from the menu for the next placement.
+            this.selectedDefId = null;
+            this.buildMenu?.deselect();
+            this.clearGhost();
             this.lastHoverCell = null;
+            this.lastGhostAffordable = null;
         }
     }
 
@@ -194,7 +219,7 @@ export class WorldScene extends Scene {
 
         for (const cell of this.buildingSystem.footprintCells(def, building.gridX, building.gridY)) {
             const { x, y } = gridToWorld(cell.gridX, cell.gridY);
-            this.add.image(x, y, 'placeholder-building').setDepth(depth);
+            this.add.image(x, y, 'placeholder-building').setOrigin(0.5, this.buildingOriginY).setDepth(depth);
         }
     }
 }
