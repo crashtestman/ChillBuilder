@@ -7,6 +7,13 @@ export interface GodAbilityDef {
     // god-power model.
     energyCost: number;
     cooldownSeconds: number;
+    // AoE damage dealt to enemies at the target cell, resolved by
+    // CombatSystem (M8). 30 one-shots a raider (20 max health) with room to
+    // spare against tougher enemies added later.
+    damage: number;
+    // Chebyshev radius (grid cells) around the tapped cell that takes
+    // damage — matches how CombatSystem measures tower range.
+    radius: number;
 }
 
 // Smite is the only ability the vertical slice needs (M6 wires the actual
@@ -19,6 +26,8 @@ export const GOD_ABILITIES: Record<string, GodAbilityDef> = {
         name: 'Smite',
         unlockThreshold: 50,
         energyCost: 20,
-        cooldownSeconds: 5
+        cooldownSeconds: 5,
+        damage: 30,
+        radius: 1
     }
 };

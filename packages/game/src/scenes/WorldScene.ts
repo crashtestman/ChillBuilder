@@ -18,6 +18,7 @@ import {
     worldToNearestGrid
 } from '../iso/IsoMath';
 import { BuildingSystem } from '../systems/BuildingSystem';
+import { CombatSystem } from '../systems/CombatSystem';
 import { EconomySystem } from '../systems/EconomySystem';
 import { GodPowerSystem } from '../systems/GodPowerSystem';
 import { PathingSystem } from '../systems/PathingSystem';
@@ -59,6 +60,7 @@ export class WorldScene extends Scene {
     private godPowerSystem!: GodPowerSystem;
     private pathingSystem!: PathingSystem;
     private waveSystem!: WaveSystem;
+    private combatSystem!: CombatSystem;
 
     private selectedDefId: string | null = null;
     private smiteArmed = false;
@@ -66,6 +68,7 @@ export class WorldScene extends Scene {
     private lastHoverCell: GridPoint | null = null;
     private lastGhostAffordable: boolean | null = null;
     private buildingOriginY = 0.5;
+    private towerOriginY = 0.5;
     private enemyImages = new Map<string, GameObjects.Image>();
 
     constructor() {
@@ -92,6 +95,21 @@ export class WorldScene extends Scene {
         this.buildingOriginY = buildingTexture.originY;
         createPlaceholderBlockTexture(this, 'placeholder-ghost-ok', TILE_WIDTH, TILE_HEIGHT, BUILDING_WALL_HEIGHT, 0x4a7cff);
         createPlaceholderBlockTexture(this, 'placeholder-ghost-bad', TILE_WIDTH, TILE_HEIGHT, BUILDING_WALL_HEIGHT, 0xd23b3b);
+
+        // Taller and stone-grey rather than the generic building's wood
+        // tone, so a tower reads as a defensive structure at a glance
+        // instead of just another house-shaped block.
+        const towerTexture = createPlaceholderBlockTexture(
+            this,
+            'placeholder-tower',
+            TILE_WIDTH,
+            TILE_HEIGHT,
+            BUILDING_WALL_HEIGHT * 2.5,
+            0x8a8f99,
+            0x5a5f68
+        );
+        this.towerOriginY = towerTexture.originY;
+        createPlaceholderDiamondTexture(this, 'placeholder-tower-fire', TILE_WIDTH * 0.4, TILE_HEIGHT * 0.4, 0xffb347, 0xff7f11);
         createPlaceholderDiamondTexture(this, 'placeholder-smite-effect', TILE_WIDTH, TILE_HEIGHT, 0xfff2b0, 0xffd23b);
         // Smaller than a tile so a moving enemy reads as a unit standing on
         // the grid, not another tile-sized object.
@@ -106,9 +124,12 @@ export class WorldScene extends Scene {
         this.godPowerSystem = new GodPowerSystem(this.gameState, this.eventBus);
         this.pathingSystem = new PathingSystem(this.buildingSystem);
         this.waveSystem = new WaveSystem(this.gameState, this.eventBus, mapDef, this.pathingSystem);
+        this.combatSystem = new CombatSystem(this.gameState, this.eventBus, this.waveSystem);
         this.eventBus.on('building:placed', ({ building }) => this.renderBuilding(building));
         this.eventBus.on('enemy:spawned', ({ enemy }) => this.renderEnemy(enemy));
         this.eventBus.on('enemy:reachedCity', ({ enemyId }) => this.removeEnemyImage(enemyId));
+        this.eventBus.on('enemy:killed', ({ enemyId }) => this.removeEnemyImage(enemyId));
+        this.eventBus.on('tower:fired', ({ gridX, gridY }) => this.playTowerFireEffect({ gridX, gridY }));
 
         this.buildGroundPlane();
         this.setupCamera();
@@ -164,6 +185,10 @@ export class WorldScene extends Scene {
         this.worshipSystem.update(deltaSeconds);
         this.godPowerSystem.update(deltaSeconds);
         this.waveSystem.update(deltaSeconds);
+        // After WaveSystem so a tower/Smite never targets an enemy that
+        // reached the city this same tick, and before sprite sync so a kill
+        // this tick is reflected in the same frame it happens.
+        this.combatSystem.update(deltaSeconds);
         this.abilityBar?.refresh();
         this.updateGhostPreview();
         this.updateEnemySprites();
@@ -315,11 +340,23 @@ export class WorldScene extends Scene {
     private renderBuilding(building: PlacedBuilding): void {
         const def = BUILDINGS[building.defId];
         const depth = footprintDepth(building.gridX, building.gridY, def.footprint.width, def.footprint.height, DEPTH_LAYER_BUILDING);
+        const isTower = def.category === 'defense';
+        const textureKey = isTower ? 'placeholder-tower' : 'placeholder-building';
+        const originY = isTower ? this.towerOriginY : this.buildingOriginY;
 
         for (const cell of this.buildingSystem.footprintCells(def, building.gridX, building.gridY)) {
             const { x, y } = gridToWorld(cell.gridX, cell.gridY);
-            this.add.image(x, y, 'placeholder-building').setOrigin(0.5, this.buildingOriginY).setDepth(depth);
+            this.add.image(x, y, textureKey).setOrigin(0.5, originY).setDepth(depth);
         }
+    }
+
+    private playTowerFireEffect(cell: GridPoint): void {
+        const { x, y } = gridToWorld(cell.gridX, cell.gridY);
+        const effect = this.add
+            .image(x, y, 'placeholder-tower-fire')
+            .setOrigin(0.5, 0.5)
+            .setDepth(footprintDepth(cell.gridX, cell.gridY, 1, 1, DEPTH_LAYER_GHOST));
+        this.time.delayedCall(150, () => effect.destroy());
     }
 
     private renderEnemy(enemy: LiveEnemy): void {

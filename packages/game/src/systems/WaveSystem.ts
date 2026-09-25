@@ -1,7 +1,7 @@
 import { ENEMIES } from '../data/enemies';
 import type { MapDef } from '../data/mapDefs/slice01';
 import { WAVES } from '../data/waves';
-import { gridToWorld } from '../iso/IsoMath';
+import { gridToWorld, worldToNearestGrid } from '../iso/IsoMath';
 import type { EventBus } from '../state/EventBus';
 import type { GameState, LiveEnemy } from '../state/GameState';
 import type { PathingSystem } from './PathingSystem';
@@ -11,8 +11,10 @@ let nextEnemyId = 1;
 // Owns the whole enemy lifecycle (spawn timing, movement along its path,
 // reaching the city) — the plan's system list has no separate "movement"
 // system, and WaveSystem is already the natural owner of gameState.enemies
-// since it's the one creating them. PathingSystem is only consulted once,
-// at spawn, for the initial route.
+// since it's the one creating them. PathingSystem is consulted at spawn for
+// the initial route, and again for every live enemy whenever a building is
+// placed (M8's towers made this matter: without it, a tower placed mid-wave
+// would just get walked through by enemies already in transit).
 export class WaveSystem {
     private waveIndex = 0;
     private waveElapsed = 0;
@@ -26,7 +28,9 @@ export class WaveSystem {
         private readonly eventBus: EventBus,
         private readonly mapDef: MapDef,
         private readonly pathingSystem: PathingSystem
-    ) {}
+    ) {
+        eventBus.on('building:placed', () => this.repathLiveEnemies());
+    }
 
     update(deltaSeconds: number): void {
         // Movement before spawning: a newly-spawned enemy shouldn't also
@@ -43,6 +47,21 @@ export class WaveSystem {
     /** True once every wave has finished spawning (not necessarily killed/arrived). */
     isSpawningComplete(): boolean {
         return this.allWavesSpawned;
+    }
+
+    // The one place gameState.enemies ever loses an entry — both the
+    // arrival path below and CombatSystem's kill path (M8) go through this,
+    // so there's a single removal mechanism rather than two that could
+    // drift apart. Returns false (no-op) if the enemy is already gone,
+    // since a tower and Smite could otherwise both try to finish off the
+    // same low-health enemy in one tick.
+    removeEnemy(enemyId: string): boolean {
+        const index = this.gameState.enemies.findIndex((enemy) => enemy.id === enemyId);
+        if (index === -1) {
+            return false;
+        }
+        this.gameState.enemies.splice(index, 1);
+        return true;
     }
 
     private updateSpawning(deltaSeconds: number): void {
@@ -81,6 +100,28 @@ export class WaveSystem {
             if (this.waveIndex >= WAVES.length) {
                 this.allWavesSpawned = true;
             }
+        }
+    }
+
+    // Re-routes every live enemy from its current position whenever a new
+    // building goes up, so a tower (or any building) placed mid-wave
+    // actually redirects enemies already in transit instead of leaving them
+    // walking their stale spawn-time route straight through it.
+    private repathLiveEnemies(): void {
+        for (const enemy of this.gameState.enemies) {
+            const currentCell = worldToNearestGrid(enemy.x, enemy.y);
+            const newPath = this.pathingSystem.findPath(currentCell, this.mapDef.cityCore);
+            if (!newPath || newPath.length === 0) {
+                // The new building landed on the enemy's own current cell,
+                // making that cell itself unwalkable — no route exists from
+                // exactly where it's standing. Leave its old path/pathIndex
+                // alone rather than freezing it; it keeps moving toward its
+                // last known waypoint, which is a rare visual glitch, not a
+                // stuck-forever enemy.
+                continue;
+            }
+            enemy.path = newPath;
+            enemy.pathIndex = 1;
         }
     }
 
@@ -151,11 +192,9 @@ export class WaveSystem {
             }
         }
 
-        if (arrived.length > 0) {
-            this.gameState.enemies = this.gameState.enemies.filter((enemy) => !arrived.includes(enemy.id));
-            for (const enemyId of arrived) {
-                this.eventBus.emit('enemy:reachedCity', { enemyId });
-            }
+        for (const enemyId of arrived) {
+            this.removeEnemy(enemyId);
+            this.eventBus.emit('enemy:reachedCity', { enemyId });
         }
     }
 }

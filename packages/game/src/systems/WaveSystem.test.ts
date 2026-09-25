@@ -23,6 +23,7 @@ describe('WaveSystem', () => {
     let gameState: GameState;
     let eventBus: EventBus;
     let mapDef: MapDef;
+    let buildingSystem: BuildingSystem;
     let system: WaveSystem;
     const wave = WAVES[0];
 
@@ -30,7 +31,7 @@ describe('WaveSystem', () => {
         gameState = createGameState();
         eventBus = new EventBus();
         mapDef = makeMapDef(10, 10);
-        const buildingSystem = new BuildingSystem(gameState, eventBus, mapDef);
+        buildingSystem = new BuildingSystem(gameState, eventBus, mapDef);
         const pathing = new PathingSystem(buildingSystem);
         system = new WaveSystem(gameState, eventBus, mapDef, pathing);
     });
@@ -113,5 +114,25 @@ describe('WaveSystem', () => {
 
         expect(gameState.enemies.find((e) => e.id === enemyId)).toBeUndefined();
         expect(arrived).toEqual([enemyId]);
+    });
+
+    it('repaths a live enemy when a building is placed on its route ahead of it', () => {
+        system.update(wave.startDelaySeconds); // spawns e1
+        system.update(1); // let it get partway along its original path
+
+        const enemy = gameState.enemies[0];
+        const originalPath = enemy.path;
+        // A few steps ahead of wherever the enemy currently is, so placing
+        // there forces a detour rather than landing behind/on it.
+        const blockCell = originalPath[Math.min(enemy.pathIndex + 3, originalPath.length - 2)];
+
+        gameState.resources.wood = 100;
+        gameState.resources.gold = 100;
+        const result = buildingSystem.place('tower', blockCell.gridX, blockCell.gridY);
+
+        expect(result.ok).toBe(true);
+        expect(enemy.path.some((c) => c.gridX === blockCell.gridX && c.gridY === blockCell.gridY)).toBe(false);
+        expect(enemy.path[enemy.path.length - 1]).toEqual(mapDef.cityCore);
+        expect(enemy.pathIndex).toBe(1);
     });
 });

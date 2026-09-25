@@ -15,6 +15,8 @@ export interface GameEvents {
     'wave:started': { waveId: string };
     'enemy:spawned': { enemy: LiveEnemy };
     'enemy:reachedCity': { enemyId: string };
+    'enemy:killed': { enemyId: string };
+    'tower:fired': { buildingId: string; targetEnemyId: string; gridX: number; gridY: number };
 }
 
 type Listener<T> = (payload: T) => void;

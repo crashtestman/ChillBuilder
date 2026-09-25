@@ -17,6 +17,12 @@ export interface BuildingDef {
     // How many population this building houses, consumed by PopulationSystem.
     housingCapacity?: number;
     isTemple?: boolean;
+    // Presence of these three together marks a building a tower, consumed
+    // by CombatSystem — range/distance is measured in grid cells (Chebyshev,
+    // matching worldToNearestGrid's rounding) from the tower's own cell.
+    range?: number;
+    damage?: number;
+    fireIntervalSeconds?: number;
 }
 
 export const BUILDINGS: Record<string, BuildingDef> = {
@@ -51,5 +57,15 @@ export const BUILDINGS: Record<string, BuildingDef> = {
         footprint: { width: 2, height: 2 },
         buildCost: { wood: 20, gold: 15 },
         isTemple: true
+    },
+    tower: {
+        id: 'tower',
+        name: 'Watchtower',
+        category: 'defense',
+        footprint: { width: 1, height: 1 },
+        buildCost: { wood: 15, gold: 20 },
+        range: 3,
+        damage: 8,
+        fireIntervalSeconds: 1.5
     }
 };
