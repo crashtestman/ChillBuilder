@@ -1,0 +1,15 @@
+{
+  "name": "chillbuilder",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Medieval city builder / god game / tower defense hybrid.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @chillbuilder/game",
+    "build:web": "npm run build -w @chillbuilder/game",
+    "typecheck": "npm run typecheck -w @chillbuilder/game",
+    "test": "npm run test -w @chillbuilder/game"
+  }
+}

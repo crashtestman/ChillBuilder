@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+.env
+.env.local
+
+# Capacitor / mobile
+packages/mobile/android/
+packages/mobile/ios/
+
+# Electron
+packages/desktop/dist/
+packages/desktop/out/
