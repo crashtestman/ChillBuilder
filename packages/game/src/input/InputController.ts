@@ -1,16 +1,22 @@
 import { Math as PhaserMath, type Cameras, type Input, type Scene } from 'phaser';
+import { type GridPoint, worldToNearestGrid } from '../iso/IsoMath';
 
 export interface InputControllerConfig {
     minZoom?: number;
     maxZoom?: number;
     wheelZoomStep?: number;
+    onTileTapped?: (cell: GridPoint) => void;
 }
 
+const TAP_MOVE_THRESHOLD = 6;
+
 /**
- * Wraps Phaser's raw pointer/wheel events into camera pan + zoom (drag or
- * single-finger touch to pan, wheel or two-finger pinch to zoom). Kept
- * separate from any one Scene, per the plan's platform-readiness notes, so
- * touch and mouse are handled through the same code path from day one.
+ * Wraps Phaser's raw pointer/wheel events into the platform-agnostic
+ * intents the plan calls for: onPan/onZoom (drag or single-finger touch to
+ * pan, wheel or two-finger pinch to zoom, applied straight to the camera)
+ * and onTileTapped (a down+up with no drag and no pinch, converted from
+ * screen space to a grid cell here — not via per-sprite hit areas, per the
+ * plan's isometric-input note).
  */
 export class InputController {
     private readonly scene: Scene;
@@ -18,6 +24,7 @@ export class InputController {
     private readonly minZoom: number;
     private readonly maxZoom: number;
     private readonly wheelZoomStep: number;
+    private readonly onTileTapped?: (cell: GridPoint) => void;
 
     private isPanning = false;
     // Tracked ourselves (rather than Phaser's Pointer.prevPosition) so that
@@ -27,12 +34,24 @@ export class InputController {
     private lastPanY = 0;
     private lastPinchDistance = -1;
 
+    // True only while a gesture that began with a canvas pointerdown is in
+    // progress. Without this, clicking a DOM overlay button (BuildMenu) —
+    // which never fires a canvas pointerdown — could still leave a stale
+    // "clean tap" state from whatever gesture happened before it, and the
+    // resulting pointerupoutside would place a building under the menu.
+    private gestureActive = false;
+    private gestureStartX = 0;
+    private gestureStartY = 0;
+    private gestureMoved = false;
+    private gestureHadPinch = false;
+
     constructor(scene: Scene, config: InputControllerConfig = {}) {
         this.scene = scene;
         this.camera = scene.cameras.main;
         this.minZoom = config.minZoom ?? 0.5;
         this.maxZoom = config.maxZoom ?? 2;
         this.wheelZoomStep = config.wheelZoomStep ?? 0.1;
+        this.onTileTapped = config.onTileTapped;
 
         // A second simultaneous pointer is needed to recognize pinch-zoom.
         scene.input.addPointer(1);
@@ -65,8 +84,15 @@ export class InputController {
     private onPointerDown = (pointer: Input.Pointer): void => {
         if (this.activePointers.length === 1) {
             this.beginPanningAt(pointer.x, pointer.y);
+            this.gestureActive = true;
+            this.gestureStartX = pointer.x;
+            this.gestureStartY = pointer.y;
+            this.gestureMoved = false;
+            this.gestureHadPinch = false;
         } else {
+            // A second pointer joined an existing gesture: no longer a tap.
             this.isPanning = false;
+            this.gestureHadPinch = true;
         }
     };
 
@@ -75,6 +101,7 @@ export class InputController {
 
         if (pointers.length >= 2) {
             this.isPanning = false;
+            this.gestureHadPinch = true;
             this.handlePinch(pointers[0], pointers[1]);
             return;
         }
@@ -86,10 +113,18 @@ export class InputController {
             this.camera.scrollY -= (pointer.y - this.lastPanY) / this.camera.zoom;
             this.lastPanX = pointer.x;
             this.lastPanY = pointer.y;
+
+            if (!this.gestureMoved) {
+                const dx = pointer.x - this.gestureStartX;
+                const dy = pointer.y - this.gestureStartY;
+                if (Math.hypot(dx, dy) > TAP_MOVE_THRESHOLD) {
+                    this.gestureMoved = true;
+                }
+            }
         }
     };
 
-    private onPointerUp = (): void => {
+    private onPointerUp = (pointer: Input.Pointer): void => {
         this.lastPinchDistance = -1;
 
         const pointers = this.activePointers;
@@ -100,6 +135,13 @@ export class InputController {
             this.beginPanningAt(pointers[0].x, pointers[0].y);
         } else {
             this.isPanning = false;
+        }
+
+        if (pointers.length === 0) {
+            if (this.gestureActive && !this.gestureMoved && !this.gestureHadPinch) {
+                this.emitTileTapped(pointer.x, pointer.y);
+            }
+            this.gestureActive = false;
         }
     };
 
@@ -134,5 +176,13 @@ export class InputController {
         const worldPointAfter = this.camera.getWorldPoint(screenX, screenY);
         this.camera.scrollX += worldPointBefore.x - worldPointAfter.x;
         this.camera.scrollY += worldPointBefore.y - worldPointAfter.y;
+    }
+
+    private emitTileTapped(screenX: number, screenY: number): void {
+        if (!this.onTileTapped) {
+            return;
+        }
+        const worldPoint = this.camera.getWorldPoint(screenX, screenY);
+        this.onTileTapped(worldToNearestGrid(worldPoint.x, worldPoint.y));
     }
 }

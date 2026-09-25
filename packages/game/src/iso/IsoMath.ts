@@ -30,6 +30,17 @@ export function worldToGrid(x: number, y: number): GridPoint {
     };
 }
 
+// Rounding each axis independently is correct here (not just convenient)
+// because gridToWorld/worldToGrid are a linear map: the nearest integer grid
+// point in this skewed lattice is still found by rounding in grid space, the
+// same way it would be on a plain square grid. Used for input picking (tile
+// taps, ghost-preview hover) per the plan's "do inverse-projection math in
+// InputController" note.
+export function worldToNearestGrid(x: number, y: number): GridPoint {
+    const { gridX, gridY } = worldToGrid(x, y);
+    return { gridX: Math.round(gridX), gridY: Math.round(gridY) };
+}
+
 // Multiplier leaves room for a per-layer sub-offset (below) without
 // renumbering every tile once buildings/enemies land in later milestones.
 const DEPTH_MULTIPLIER = 16;
@@ -42,6 +53,11 @@ const DEPTH_MULTIPLIER = 16;
 export const DEPTH_LAYER_GROUND = 0;
 export const DEPTH_LAYER_BUILDING = 1;
 export const DEPTH_LAYER_ENTITY = 2;
+// Placement ghost preview always wins a tie against a real building on the
+// same footprint (e.g. hovering an already-occupied cell) — it's the only
+// invalid-placement feedback there is, so it must never be hidden behind
+// the thing it's warning you can't build on top of.
+export const DEPTH_LAYER_GHOST = 3;
 
 export function tileDepth(gridX: number, gridY: number, subOffset = DEPTH_LAYER_GROUND): number {
     return (gridX + gridY) * DEPTH_MULTIPLIER + subOffset;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEPTH_LAYER_ENTITY, footprintDepth, gridToWorld, tileDepth, worldToGrid } from './IsoMath';
+import { DEPTH_LAYER_ENTITY, footprintDepth, gridToWorld, tileDepth, worldToGrid, worldToNearestGrid } from './IsoMath';
 
 describe('gridToWorld / worldToGrid', () => {
     it('projects the origin onto itself', () => {
@@ -10,6 +10,15 @@ describe('gridToWorld / worldToGrid', () => {
         for (const [gridX, gridY] of [[0, 0], [3, 0], [0, 5], [4, 4], [-2, 7]]) {
             const world = gridToWorld(gridX, gridY);
             expect(worldToGrid(world.x, world.y)).toEqual({ gridX, gridY });
+        }
+    });
+});
+
+describe('worldToNearestGrid', () => {
+    it('snaps a point anywhere inside a tile back to that tile', () => {
+        const center = gridToWorld(3, 2);
+        for (const [dx, dy] of [[0, 0], [20, -10], [-20, 10], [0, 25]]) {
+            expect(worldToNearestGrid(center.x + dx, center.y + dy)).toEqual({ gridX: 3, gridY: 2 });
         }
     });
 });

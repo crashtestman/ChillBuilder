@@ -6,10 +6,50 @@ body {
 }
 
 #app {
+    position: relative;
     width: 100%;
     height: 100vh;
     overflow: hidden;
     display: flex;
     justify-content: center;
     align-items: center;
+}
+
+/* DOM overlay for HUD/menus (per the plan: cheaper than in-canvas UI, works
+   the same in a WebView/Electron shell later). Sits above the canvas;
+   pointer-events is re-enabled per-element so the world underneath it can
+   still be panned/zoomed/tapped everywhere the overlay has no controls. */
+#ui-root {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.build-menu {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    display: flex;
+    gap: 8px;
+    pointer-events: auto;
+}
+
+.build-menu__item {
+    padding: 8px 12px;
+    border: 1px solid #6b5230;
+    border-radius: 4px;
+    background: #2b2118;
+    color: #f4e8d0;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.build-menu__item:hover {
+    background: #3a2c1e;
+}
+
+.build-menu__item--selected {
+    border-color: #f4e8d0;
+    background: #4a7c3f;
 }
