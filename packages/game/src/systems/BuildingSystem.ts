@@ -121,7 +121,7 @@ export class BuildingSystem {
         return gridX >= 0 && gridY >= 0 && gridX < this.mapDef.cols && gridY < this.mapDef.rows;
     }
 
-    private canAfford(def: BuildingDef): boolean {
+    canAfford(def: BuildingDef): boolean {
         return Object.entries(def.buildCost).every(
             ([resourceId, cost]) => (this.gameState.resources[resourceId] ?? 0) >= cost
         );

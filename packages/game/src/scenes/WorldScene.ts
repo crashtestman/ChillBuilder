@@ -15,26 +15,32 @@ import {
     worldToNearestGrid
 } from '../iso/IsoMath';
 import { BuildingSystem } from '../systems/BuildingSystem';
+import { EconomySystem } from '../systems/EconomySystem';
 import { EventBus } from '../state/EventBus';
 import { createGameState, type GameState, type PlacedBuilding } from '../state/GameState';
 import { BuildMenu } from '../ui/BuildMenu';
+import { ResourceBar } from '../ui/ResourceBar';
 import { createPlaceholderDiamondTexture } from '../util/PlaceholderFactory';
 
 const mapDef = slice01;
 
-// M2: building placement — BuildMenu, ghost preview via inverse-projection,
-// footprint/cost validation and the wall-off rule all live in
-// BuildingSystem; this scene just renders whatever it decides.
+// M2/M3: building placement (BuildMenu, ghost preview via inverse-
+// projection, footprint/cost validation, the wall-off rule) lives in
+// BuildingSystem; the resource tick lives in EconomySystem. This scene just
+// renders whatever they decide and forwards frame time to the tick.
 export class WorldScene extends Scene {
     private inputController?: InputController;
     private buildMenu?: BuildMenu;
+    private resourceBar?: ResourceBar;
     private gameState!: GameState;
     private eventBus!: EventBus;
     private buildingSystem!: BuildingSystem;
+    private economySystem!: EconomySystem;
 
     private selectedDefId: string | null = null;
     private ghostImages: GameObjects.Image[] = [];
     private lastHoverCell: GridPoint | null = null;
+    private lastGhostAffordable: boolean | null = null;
 
     constructor() {
         super('World');
@@ -49,6 +55,7 @@ export class WorldScene extends Scene {
         this.gameState = createGameState();
         this.eventBus = new EventBus();
         this.buildingSystem = new BuildingSystem(this.gameState, this.eventBus, mapDef);
+        this.economySystem = new EconomySystem(this.gameState, this.eventBus);
         this.eventBus.on('building:placed', ({ building }) => this.renderBuilding(building));
 
         this.buildGroundPlane();
@@ -62,14 +69,17 @@ export class WorldScene extends Scene {
             this.selectedDefId = defId;
             this.lastHoverCell = null;
         });
+        this.resourceBar = new ResourceBar(this.gameState, this.eventBus);
 
         this.events.once('shutdown', () => {
             this.inputController?.destroy();
             this.buildMenu?.destroy();
+            this.resourceBar?.destroy();
         });
     }
 
-    update(): void {
+    update(_time: number, delta: number): void {
+        this.economySystem.update(delta / 1000);
         this.updateGhostPreview();
     }
 
@@ -124,11 +134,22 @@ export class WorldScene extends Scene {
         // Same screen -> grid conversion InputController uses for taps, so
         // the ghost lines up exactly with what tapping there will do.
         const hovered = worldToNearestGrid(worldPoint.x, worldPoint.y);
+        // Affordability changes continuously now that resources tick
+        // (EconomySystem) — a still-hovered cell can flip from unaffordable
+        // to affordable without the pointer ever moving, and the ghost is
+        // the only feedback for that, so the cache has to track it too.
+        const affordable = this.buildingSystem.canAfford(def);
 
-        if (this.lastHoverCell && this.lastHoverCell.gridX === hovered.gridX && this.lastHoverCell.gridY === hovered.gridY) {
+        if (
+            this.lastHoverCell &&
+            this.lastHoverCell.gridX === hovered.gridX &&
+            this.lastHoverCell.gridY === hovered.gridY &&
+            this.lastGhostAffordable === affordable
+        ) {
             return;
         }
         this.lastHoverCell = hovered;
+        this.lastGhostAffordable = affordable;
 
         this.clearGhost();
 

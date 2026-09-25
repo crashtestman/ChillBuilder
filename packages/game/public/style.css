@@ -53,3 +53,26 @@ body {
     border-color: #f4e8d0;
     background: #4a7c3f;
 }
+
+.resource-bar {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    gap: 16px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    background: rgba(15, 15, 15, 0.6);
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    color: #f4e8d0;
+}
+
+.resource-bar__item {
+    display: flex;
+    gap: 4px;
+}
+
+.resource-bar__label {
+    color: #b8a988;
+}

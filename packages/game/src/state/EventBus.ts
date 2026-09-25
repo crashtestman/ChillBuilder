@@ -26,6 +26,11 @@ export class EventBus {
         return this;
     }
 
+    off<K extends keyof GameEvents>(event: K, listener: Listener<GameEvents[K]>): this {
+        this.listeners.get(event)?.delete(listener as Listener<never>);
+        return this;
+    }
+
     emit<K extends keyof GameEvents>(event: K, payload: GameEvents[K]): void {
         this.listeners.get(event)?.forEach((listener) => (listener as Listener<GameEvents[K]>)(payload));
     }

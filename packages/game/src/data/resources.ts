@@ -7,5 +7,6 @@ export interface ResourceDef {
 
 export const RESOURCES: Record<string, ResourceDef> = {
     wood: { id: 'wood', name: 'Wood', startingAmount: 50 },
-    gold: { id: 'gold', name: 'Gold', startingAmount: 20 }
+    gold: { id: 'gold', name: 'Gold', startingAmount: 20 },
+    food: { id: 'food', name: 'Food', startingAmount: 20 }
 };

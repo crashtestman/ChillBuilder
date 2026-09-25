@@ -11,14 +11,13 @@ export interface BuildingDef {
     category: BuildingCategory;
     footprint: BuildingFootprint;
     buildCost: Record<string, number>;
+    // Resource -> amount per second, ticked by EconomySystem.
+    produces?: Record<string, number>;
+    consumes?: Record<string, number>;
     providesHousing?: boolean;
     isTemple?: boolean;
 }
 
-// House/Farm content (production rates, housing capacity) is fleshed out in
-// M3 — these defs exist now so M2's placement mechanics have something real
-// to place, including one multi-cell footprint (House) to exercise the
-// occupancy grid and depth-sort beyond the 1x1 case.
 export const BUILDINGS: Record<string, BuildingDef> = {
     house: {
         id: 'house',
@@ -33,6 +32,15 @@ export const BUILDINGS: Record<string, BuildingDef> = {
         name: 'Farm',
         category: 'economy',
         footprint: { width: 1, height: 1 },
-        buildCost: { wood: 10 }
+        buildCost: { wood: 10 },
+        produces: { food: 1 }
+    },
+    woodcutter: {
+        id: 'woodcutter',
+        name: 'Woodcutter',
+        category: 'economy',
+        footprint: { width: 1, height: 1 },
+        buildCost: { wood: 15 },
+        produces: { wood: 1 }
     }
 };
