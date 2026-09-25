@@ -23,3 +23,39 @@ export function createPlaceholderRectTexture(
     graphics.generateTexture(key, width, height);
     graphics.destroy();
 }
+
+/**
+ * Generates a rhombus texture matching the project's 2:1 iso tile ratio, so
+ * ground tiles placed via IsoMath's projection tile edge-to-edge instead of
+ * showing rectangular sprite bounds overlapping their neighbors.
+ */
+export function createPlaceholderDiamondTexture(
+    scene: Scene,
+    key: string,
+    width: number,
+    height: number,
+    fillColor: number,
+    strokeColor?: number
+): void {
+    if (scene.textures.exists(key)) {
+        return;
+    }
+
+    const graphics = scene.add.graphics();
+    graphics.fillStyle(fillColor, 1);
+    if (strokeColor !== undefined) {
+        graphics.lineStyle(2, strokeColor, 1);
+    }
+    graphics.beginPath();
+    graphics.moveTo(width / 2, 0);
+    graphics.lineTo(width, height / 2);
+    graphics.lineTo(width / 2, height);
+    graphics.lineTo(0, height / 2);
+    graphics.closePath();
+    graphics.fillPath();
+    if (strokeColor !== undefined) {
+        graphics.strokePath();
+    }
+    graphics.generateTexture(key, width, height);
+    graphics.destroy();
+}
