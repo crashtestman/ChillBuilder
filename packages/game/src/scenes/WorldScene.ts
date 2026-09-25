@@ -6,6 +6,7 @@ import { slice01 } from '../data/mapDefs/slice01';
 import { InputController } from '../input/InputController';
 import {
     DEPTH_LAYER_BUILDING,
+    DEPTH_LAYER_ENTITY,
     DEPTH_LAYER_GHOST,
     footprintDepth,
     GROUND_DEPTH,
@@ -13,15 +14,18 @@ import {
     gridToWorld,
     TILE_HEIGHT,
     TILE_WIDTH,
+    tileDepth,
     worldToNearestGrid
 } from '../iso/IsoMath';
 import { BuildingSystem } from '../systems/BuildingSystem';
 import { EconomySystem } from '../systems/EconomySystem';
 import { GodPowerSystem } from '../systems/GodPowerSystem';
+import { PathingSystem } from '../systems/PathingSystem';
 import { PopulationSystem } from '../systems/PopulationSystem';
+import { WaveSystem } from '../systems/WaveSystem';
 import { WorshipSystem } from '../systems/WorshipSystem';
 import { EventBus } from '../state/EventBus';
-import { createGameState, type GameState, type PlacedBuilding } from '../state/GameState';
+import { createGameState, type GameState, type LiveEnemy, type PlacedBuilding } from '../state/GameState';
 import { AbilityBar } from '../ui/AbilityBar';
 import { BuildMenu } from '../ui/BuildMenu';
 import { GodPowerBar } from '../ui/GodPowerBar';
@@ -53,6 +57,8 @@ export class WorldScene extends Scene {
     private populationSystem!: PopulationSystem;
     private worshipSystem!: WorshipSystem;
     private godPowerSystem!: GodPowerSystem;
+    private pathingSystem!: PathingSystem;
+    private waveSystem!: WaveSystem;
 
     private selectedDefId: string | null = null;
     private smiteArmed = false;
@@ -60,6 +66,7 @@ export class WorldScene extends Scene {
     private lastHoverCell: GridPoint | null = null;
     private lastGhostAffordable: boolean | null = null;
     private buildingOriginY = 0.5;
+    private enemyImages = new Map<string, GameObjects.Image>();
 
     constructor() {
         super('World');
@@ -86,6 +93,9 @@ export class WorldScene extends Scene {
         createPlaceholderBlockTexture(this, 'placeholder-ghost-ok', TILE_WIDTH, TILE_HEIGHT, BUILDING_WALL_HEIGHT, 0x4a7cff);
         createPlaceholderBlockTexture(this, 'placeholder-ghost-bad', TILE_WIDTH, TILE_HEIGHT, BUILDING_WALL_HEIGHT, 0xd23b3b);
         createPlaceholderDiamondTexture(this, 'placeholder-smite-effect', TILE_WIDTH, TILE_HEIGHT, 0xfff2b0, 0xffd23b);
+        // Smaller than a tile so a moving enemy reads as a unit standing on
+        // the grid, not another tile-sized object.
+        createPlaceholderDiamondTexture(this, 'placeholder-enemy', TILE_WIDTH * 0.5, TILE_HEIGHT * 0.5, 0x9c1f1f, 0x5c0f0f);
 
         this.gameState = createGameState();
         this.eventBus = new EventBus();
@@ -94,7 +104,11 @@ export class WorldScene extends Scene {
         this.populationSystem = new PopulationSystem(this.gameState, this.eventBus);
         this.worshipSystem = new WorshipSystem(this.gameState, this.eventBus);
         this.godPowerSystem = new GodPowerSystem(this.gameState, this.eventBus);
+        this.pathingSystem = new PathingSystem(this.buildingSystem);
+        this.waveSystem = new WaveSystem(this.gameState, this.eventBus, mapDef, this.pathingSystem);
         this.eventBus.on('building:placed', ({ building }) => this.renderBuilding(building));
+        this.eventBus.on('enemy:spawned', ({ enemy }) => this.renderEnemy(enemy));
+        this.eventBus.on('enemy:reachedCity', ({ enemyId }) => this.removeEnemyImage(enemyId));
 
         this.buildGroundPlane();
         this.setupCamera();
@@ -142,12 +156,17 @@ export class WorldScene extends Scene {
         // GodPowerSystem's stat accrual isn't ticked here — it reacts to
         // WorshipSystem's faith:generated synchronously instead — but its
         // ability cooldowns are real-time, so those still need a tick.
+        // WaveSystem (spawning/movement) is independent of the economy
+        // chain above; it's last only because there's no ordering
+        // requirement either way.
         this.economySystem.update(deltaSeconds);
         this.populationSystem.update(deltaSeconds);
         this.worshipSystem.update(deltaSeconds);
         this.godPowerSystem.update(deltaSeconds);
+        this.waveSystem.update(deltaSeconds);
         this.abilityBar?.refresh();
         this.updateGhostPreview();
+        this.updateEnemySprites();
     }
 
     private buildGroundPlane(): void {
@@ -300,6 +319,33 @@ export class WorldScene extends Scene {
         for (const cell of this.buildingSystem.footprintCells(def, building.gridX, building.gridY)) {
             const { x, y } = gridToWorld(cell.gridX, cell.gridY);
             this.add.image(x, y, 'placeholder-building').setOrigin(0.5, this.buildingOriginY).setDepth(depth);
+        }
+    }
+
+    private renderEnemy(enemy: LiveEnemy): void {
+        const image = this.add.image(enemy.x, enemy.y, 'placeholder-enemy').setOrigin(0.5, 0.5);
+        this.enemyImages.set(enemy.id, image);
+    }
+
+    private removeEnemyImage(enemyId: string): void {
+        this.enemyImages.get(enemyId)?.destroy();
+        this.enemyImages.delete(enemyId);
+    }
+
+    // "Live depth recompute": an enemy's depth is derived from its current
+    // continuous position, not the grid cell it spawned in, so it sorts
+    // correctly against buildings/ground as it physically crosses cells —
+    // per the plan's M7 deliverable and the M1 depth-sort acceptance
+    // criterion this satisfies for a moving entity.
+    private updateEnemySprites(): void {
+        for (const enemy of this.gameState.enemies) {
+            const image = this.enemyImages.get(enemy.id);
+            if (!image) {
+                continue;
+            }
+            image.setPosition(enemy.x, enemy.y);
+            const { gridX, gridY } = worldToNearestGrid(enemy.x, enemy.y);
+            image.setDepth(tileDepth(gridX, gridY, DEPTH_LAYER_ENTITY));
         }
     }
 }

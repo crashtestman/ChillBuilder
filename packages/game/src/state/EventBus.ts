@@ -1,4 +1,4 @@
-import type { PlacedBuilding, PopulationState } from './GameState';
+import type { LiveEnemy, PlacedBuilding, PopulationState } from './GameState';
 
 // Event vocabulary grows as each milestone needs it.
 export interface GameEvents {
@@ -12,6 +12,9 @@ export interface GameEvents {
     // only knows about unlock/cooldown/energy bookkeeping. Damage
     // resolution against this target is finished in M8's CombatSystem.
     'ability:cast': { abilityId: string; gridX: number; gridY: number };
+    'wave:started': { waveId: string };
+    'enemy:spawned': { enemy: LiveEnemy };
+    'enemy:reachedCity': { enemyId: string };
 }
 
 type Listener<T> = (payload: T) => void;

@@ -14,7 +14,11 @@ export type PlacementFailureReason =
 
 export type PlacementCheck = { ok: true } | { ok: false; reason: PlacementFailureReason };
 
-const NEIGHBOR_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+// Shared with PathingSystem (M7) so A* walks the exact same adjacency the
+// wall-off guarantee below was checked against — a stricter or different
+// adjacency there would make "a path still exists" a lie enemies could
+// stall on.
+export const NEIGHBOR_OFFSETS: ReadonlyArray<readonly [number, number]> = [
     [1, 0],
     [-1, 0],
     [0, 1],
@@ -121,6 +125,21 @@ export class BuildingSystem {
         return gridX >= 0 && gridY >= 0 && gridX < this.mapDef.cols && gridY < this.mapDef.rows;
     }
 
+    // The single definition of "walkable" — in bounds, not map-blocked, not
+    // covered by a building. PathingSystem (M7) queries this directly
+    // rather than keeping its own occupancy tracking, so enemy pathing can
+    // never disagree with what the wall-off guarantee below already
+    // verified was reachable.
+    isWalkable(gridX: number, gridY: number): boolean {
+        if (!this.isInBounds(gridX, gridY)) {
+            return false;
+        }
+        if (this.mapDef.blocked[gridY][gridX]) {
+            return false;
+        }
+        return !this.occupied.has(cellKey(gridX, gridY));
+    }
+
     canAfford(def: BuildingDef): boolean {
         return Object.entries(def.buildCost).every(
             ([resourceId, cost]) => (this.gameState.resources[resourceId] ?? 0) >= cost
@@ -133,19 +152,11 @@ export class BuildingSystem {
     // ever committed, rather than left for enemies to somehow resolve later.
     private pathSurvivesPlacement(newlyOccupied: readonly GridPoint[]): boolean {
         const extra = new Set(newlyOccupied.map((cell) => cellKey(cell.gridX, cell.gridY)));
-        const isWalkable = (gridX: number, gridY: number): boolean => {
-            if (!this.isInBounds(gridX, gridY)) {
-                return false;
-            }
-            if (this.mapDef.blocked[gridY][gridX]) {
-                return false;
-            }
-            const key = cellKey(gridX, gridY);
-            return !this.occupied.has(key) && !extra.has(key);
-        };
+        const isWalkableWithExtra = (gridX: number, gridY: number): boolean =>
+            this.isWalkable(gridX, gridY) && !extra.has(cellKey(gridX, gridY));
 
         const { spawn, cityCore } = this.mapDef;
-        if (!isWalkable(spawn.gridX, spawn.gridY) || !isWalkable(cityCore.gridX, cityCore.gridY)) {
+        if (!isWalkableWithExtra(spawn.gridX, spawn.gridY) || !isWalkableWithExtra(cityCore.gridX, cityCore.gridY)) {
             return false;
         }
 
@@ -162,7 +173,7 @@ export class BuildingSystem {
                 const nx = gridX + dx;
                 const ny = gridY + dy;
                 const key = cellKey(nx, ny);
-                if (!visited.has(key) && isWalkable(nx, ny)) {
+                if (!visited.has(key) && isWalkableWithExtra(nx, ny)) {
                     visited.add(key);
                     queue.push([nx, ny]);
                 }

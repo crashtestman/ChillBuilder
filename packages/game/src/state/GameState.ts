@@ -1,4 +1,5 @@
 import { RESOURCES } from '../data/resources';
+import type { GridPoint } from '../iso/IsoMath';
 
 export interface PlacedBuilding {
     id: string;
@@ -28,6 +29,20 @@ export interface GodPowerState {
     unlockedAbilities: string[];
 }
 
+export interface LiveEnemy {
+    id: string;
+    defId: string;
+    // Continuous world position (not grid-snapped) — needed for smooth
+    // movement and the "live depth recompute" the plan calls for as it
+    // crosses cells.
+    x: number;
+    y: number;
+    health: number;
+    path: GridPoint[];
+    // Index into path of the next waypoint being moved toward.
+    pathIndex: number;
+}
+
 // The single authoritative game-state object the plan calls for. Only holds
 // what's needed so far.
 export interface GameState {
@@ -36,6 +51,7 @@ export interface GameState {
     population: PopulationState;
     worship: WorshipState;
     godPower: GodPowerState;
+    enemies: LiveEnemy[];
 }
 
 export function createGameState(): GameState {
@@ -50,6 +66,7 @@ export function createGameState(): GameState {
         // Nobody lives in the city yet — growth only starts once housing exists.
         population: { total: 0, happiness: 1 },
         worship: { faithPerTick: 0, faithTotal: 0 },
-        godPower: { divineEnergy: 0, unlockedAbilities: [] }
+        godPower: { divineEnergy: 0, unlockedAbilities: [] },
+        enemies: []
     };
 }

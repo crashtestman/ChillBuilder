@@ -109,4 +109,27 @@ describe('BuildingSystem', () => {
         expect(system.canPlace('farm', 0, 2)).toEqual({ ok: false, reason: 'would-block-path' });
         expect(system.canPlace('farm', 4, 2)).toEqual({ ok: false, reason: 'would-block-path' });
     });
+
+    describe('isWalkable', () => {
+        // PathingSystem (M7) queries this directly so enemy pathing can
+        // never disagree with what the wall-off guarantee above verified.
+        it('agrees with the placement checks it shares logic with', () => {
+            const system = new BuildingSystem(gameState, eventBus, makeMapDef(5, 5));
+
+            expect(system.isWalkable(2, 2)).toBe(true);
+            expect(system.isWalkable(-1, 0)).toBe(false);
+            expect(system.isWalkable(5, 0)).toBe(false);
+
+            system.place('farm', 2, 2);
+            expect(system.isWalkable(2, 2)).toBe(false);
+        });
+
+        it('treats a map-blocked cell as unwalkable even if unoccupied', () => {
+            const mapDef = makeMapDef(5, 5);
+            mapDef.blocked[1][1] = true;
+            const system = new BuildingSystem(gameState, eventBus, mapDef);
+
+            expect(system.isWalkable(1, 1)).toBe(false);
+        });
+    });
 });
